@@ -1,7 +1,6 @@
 import io
 import os
 import re
-import sys
 import warnings
 from datetime import datetime, timedelta, timezone
 
@@ -104,13 +103,3 @@ def render():
     s3.put_object(Bucket=bucket, Key=result, Body=jpeg, ContentType="image/jpeg")
     return "", 204
 
-
-if __name__ == "__main__":
-    if sys.argv[1:] != ["init"]:
-        raise SystemExit("usage: python -m processor.app init")
-    try:
-        s3.head_bucket(Bucket=bucket)
-    except ClientError as error:
-        if error.response["ResponseMetadata"]["HTTPStatusCode"] != 404:
-            raise
-        s3.create_bucket(Bucket=bucket)
