@@ -1,0 +1,4 @@
+boto3==1.40.76
+Flask==3.1.2
+gunicorn==23.0.0
+Pillow==12.2.0

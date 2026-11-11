@@ -1,0 +1,13 @@
+groups:
+  - name: image-service
+    rules:
+      - alert: ImageBacklogOld
+        expr: max(image_oldest_pending_seconds) > 120
+        for: 1m
+        annotations:
+          summary: Oldest image job has waited more than two minutes
+      - alert: NoImageWorker
+        expr: absent(up{job="worker"} == 1)
+        for: 1m
+        annotations:
+          summary: Prometheus cannot scrape any image worker

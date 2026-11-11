@@ -1,0 +1,60 @@
+name: CI
+on:
+  push:
+    branches: ['main', 'codex/**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      JOB_LEASE_SECONDS: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Go checks
+        run: |
+          test -z "$(gofmt -l cmd migrations)"
+          go vet ./...
+          go test -race ./...
+      - name: Start isolated stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait --wait-timeout 240
+      - name: API and worker recovery
+        run: |
+          python -m pip install -r qa/requirements.txt
+          python -m pytest qa --junitxml=qa-results.xml
+          bash qa/recovery.sh
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+      - name: Load smoke test
+        env:
+          RATE: 2
+          DURATION: 15s
+        run: k6 run --summary-export=k6-summary.json qa/load.js
+      - name: Publish test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-results
+          path: |
+            qa-results.xml
+            k6-summary.json
+      - name: Report failing services
+        if: failure()
+        run: docker compose ps -a && docker compose logs --tail=100
+      - name: Remove isolated stack
+        if: always()
+        run: docker compose down -v

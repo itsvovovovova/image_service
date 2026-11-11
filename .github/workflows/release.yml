@@ -1,0 +1,57 @@
+name: Release
+on:
+  push:
+    tags: ['v2.*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish release images
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          for name in go processor; do
+            file=Dockerfile
+            if [ "$name" = processor ]; then file=processor/Dockerfile; fi
+            image="ghcr.io/${GITHUB_REPOSITORY,,}-$name:$TAG"
+            docker build --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" -f "$file" -t "$image" .
+            docker push "$image"
+          done
+      - name: Package deployment configuration
+        run: tar -czf deployment.tgz docker-compose.yml ops
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment
+          path: deployment.tgz
+
+  staging:
+    needs: publish
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency: image-service-staging
+    steps:
+      - uses: actions/checkout@v5
+      - name: Deploy to VM
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          TAG: ${{ github.ref_name }}
+        run: bash ops/deploy.sh "$TAG"

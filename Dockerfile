@@ -1,15 +1,14 @@
-FROM python:3.11-slim
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY migrations ./migrations
+RUN CGO_ENABLED=0 go build -trimpath -o /imagesvc ./cmd/imagesvc
 
-WORKDIR /app
-
-COPY requirements.txt .
-
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-ENV PYTHONPATH=/app
-
-EXPOSE 8007
-
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8007"]
+FROM alpine:3.23
+RUN apk add --no-cache ca-certificates
+COPY --from=build /imagesvc /usr/local/bin/imagesvc
+USER 65532:65532
+ENTRYPOINT ["imagesvc"]
+CMD ["api"]
