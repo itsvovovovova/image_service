@@ -2,6 +2,7 @@ import io
 import os
 import re
 import warnings
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 import boto3
@@ -66,7 +67,7 @@ def objects(key):
     obj = s3.get_object(Bucket=bucket, Key=key)
 
     def stream():
-        with obj["Body"] as body:
+        with closing(obj["Body"]) as body:
             yield from body.iter_chunks(chunk_size=64 * 1024)
 
     response = Response(stream(), content_type="application/octet-stream")
@@ -83,7 +84,7 @@ def render():
             or not KEY.fullmatch(result) or not result.startswith("result/")):
         return "", 400
     obj = s3.get_object(Bucket=bucket, Key=source)
-    with obj["Body"] as body:
+    with closing(obj["Body"]) as body:
         data = body.read(app.config["MAX_CONTENT_LENGTH"] + 1)
     if len(data) > app.config["MAX_CONTENT_LENGTH"]:
         return "", 422
